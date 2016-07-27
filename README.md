@@ -2,8 +2,9 @@
 ![sample](sample.png)
 
 <b>Live demo:</b> [http://crfasrnn.torr.vision](http://crfasrnn.torr.vision)
+<b>update:</b> This version of code is integrated with the latest caffe future version.
 
-This package contains code for the "CRF-RNN" semantic image segmentation method, published in the ICCV 2015 paper [Conditional Random Fields as Recurrent Neural Networks](http://www.robots.ox.ac.uk/~szheng/papers/CRFasRNN.pdf). Our software is built on top of the [Caffe](http://caffe.berkeleyvision.org/) deep learning library. The current version was developed by:
+This package contains code for the "CRF-RNN" semantic image segmentation method, published in the ICCV 2015 paper [Conditional Random Fields as Recurrent Neural Networks](http://www.robots.ox.ac.uk/~szheng/papers/CRFasRNN.pdf). This paper was initially described in an [arXiv tech report](http://arxiv.org/abs/1502.03240). Our software is built on top of the [Caffe](http://caffe.berkeleyvision.org/) deep learning library. The current version was developed by:
 
 [Sadeep Jayasumana](http://www.robots.ox.ac.uk/~sadeep/),
 [Shuai Zheng](http://kylezheng.org/),
@@ -30,8 +31,50 @@ If you use this code/model for your research, please consider citing the followi
 }
 ```
 
+#How to use the CRF-RNN layer
+Copy and paste the layer into a new prototxt file, the usage of this layer is indicatd as below. Check example folder for more detailed examples.
+```
+# This is part of FCN, coarse is the variable coming from FCN
+layer { type: 'Crop' name: 'crop' bottom: 'bigscore' bottom: 'data' top: 'coarse' }
 
+# This layer is used to split the output of FCN into two, which is required by CRF-RNN
+layer { type: 'Split' name: 'splitting'
+  bottom: 'coarse' top: 'unary' top: 'Q0'
+}
+
+layer {
+  name: "inference1"#if you set name "inference1", code will load parameters from caffemodel. Otherwise it will create a new layer with manually set parameters
+  type: "MultiStageMeanfield" #type of this layer
+  bottom: "unary" #input from FCN
+  bottom: "Q0" #input from FCN
+  bottom: "data" #input image
+  top: "pred" #output of CRF-RNN
+  param {
+    lr_mult: 10000#learning rate for W_G
+  }
+  param {
+  lr_mult: 10000#learning rate for W_B
+  }
+  param {
+  lr_mult: 1000 #learning rate for compatiblity transform matrix
+  }
+  multi_stage_meanfield_param {
+   num_iterations: 10 #Number of iterations for CRF-RNN
+   compatibility_mode: POTTS#Initialize the compatilibity transform matrix with a matrix whose diagonal is -1.
+   threshold: 2
+   theta_alpha: 160
+   theta_beta: 3
+   theta_gamma: 3
+   spatial_filter_weight: 3
+   bilateral_filter_weight: 5
+  }
+}
+```
 #Installation Guide
+First, you should clone the project by doing as below.
+```
+git clone --recursive https://github.com/torrvision/crfasrnn.git
+```
 
 You need to compile the modified Caffe library in this repository. Instructions for Ubuntu 14.04 are included below. You can also consult the generic [Caffe installation guide](http://caffe.berkeleyvision.org/installation.html).
 
@@ -102,6 +145,71 @@ That's it! Enjoy our software!
 ###1.3 Run the demo
 Matlab and Python scripts for running the demo are available in the matlab-scripts and python-scripts directories, respectively. You can choose either of them. Note that you should change the paths in the scripts according your environment.
 
+####For Python fans:
+First you need to download the model. In Linux, this is:
+```
+sh download_trained_model.sh
+```
+Atlernatively, you can also get the model by directly clicking the link in python-scripts/README.md.
+
+Get into the python-scripts folder, and then type:
+```
+python crfasrnn_demo.py
+```
+You will get an output.png image.
+
+To use your own images, just replace "input.jpg" in the crfasrnn_demo.py file.
+
+####For Matlab fans:
+First you need to download the model. In Linux, this is:
+```
+sh download_trained_model.sh
+```
+Atlernatively, you can also get the model by directly clicking the link in matlab-scripts/README.md.
+
+Get into the matlab-scripts folder, load your matlab, then run the crfrnn_demo.m.
+
+To use your own images, just replace "input.jpg" in the crfrnn_demo.m file.
+
+You can also find part of our model in [MatConvNet](http://www.vlfeat.org/matconvnet/pretrained/).
+
+####Explanation about the CRF-RNN layer:
+If you would like to try out the CRF-RNN model we trained, you should keep the layer name as it is "inference1", so that the code will load the parameters from caffemodel. Otherwise, it will use the parameters set by the users in the deploy.prototxt file.
+
+You should find out that the end-to-end trained CRF-RNN model does better than the alternatives. If you set the CRF-RNN layer name to "inference2", you should observe lower performance since the parameters for both CNN and CRF are not jointly optimized.
+
+
+####For training purpose:
+If you would like to train the CRF-RNN model on other dataset, please follow the piecewise steps described in our paper. You should first train a strong pixel-wise CNN model. After this, you could plug in our CRF-RNN layer into those model by adding the layer to the prototxt. Then you should be able to train the CNN and CRF-RNN layer end-to-end.
+
+Notice that the current deploy.prototxt file we provided is tailed for PASCAL VOC Challenge. This dataset contains 21 class labels including background. You should change the num_output in the corresponding layer if you would like to finetune our model for other dataset. Also, the deconvolution layer in current code does not allow initialize the parameters through prototxt. If you change the num_output there, you should manually re-initialize the parameters in caffemodel file.
+
+See the examples/segmentationcrfasrnn.
+
+####why predictions are all black?
+This could because you set different names for classifier in prototxt, causing the weights are not properly load. This is could also because you change the number of outputs in deconvolution layer in prototxt but you didnot initialize the deconvolution layer properly. 
+
+####MultiStageMeanfield seg fault?
+This error message occurs when you didnot place the spatial.par and bilateral.par in the script path.
+
+####Python training script from third parties
+We would like to thank Martinkersner Masahiro Imai to provide python training scripts for crf-rnn. 
+
+1. [martinkersner python scripts for Train-CRF-RNN](https://github.com/martinkersner/train-CRF-RNN)
+2. [MasazI python scripts for crfasrnn-training](https://github.com/MasazI/crfasrnn-training)
+
+####Merge with the upstream caffe
+This is possible to integrate the crfrnn layer into upstream caffe. However, due to the change of crop layers, the caffemodel we provided might require extra training to provide the same accuracy. mtourne Kindly provided a version that merged the code with upstream caffe. 
+
+1. [mtourne upstream version with CRFRNN](https://github.com/mtourne/crfasrnn)
+
+####GPU version of CRF-RNN
+hyenal kindly provided a purely GPU version of CRF-RNN. This would lead to considerable faster training and testing for CRF-RNN.
+
+1. [hyenal's GPU crf-rnn](https://github.com/hyenal/crfasrnn)
+
+Let us know if we miss any other works from third parties.
+
 # LICENSE
 CRF-RNN feature in Caffe is implemented for the paper:
 Shuai Zheng, Sadeep Jayasumana, Bernardino Romera-Paredes, Vibhav Vineet, Zhizhong Su, Dalong Du, Chang Huang, Philip H. S. Torr.
@@ -118,4 +226,4 @@ Permutohedral Lattice. Eurographics 2010.
 DenseCRF library from Philipp Krahenbuhl and Vladlen Koltun. Efficient Inference in Fully Connected CRFs with Gaussian Edge Potentials.
 NIPS 2011.
 
-For more information about CRF-RNN please vist the project website http://crfasrnn.torr.vision.
+For more information about CRF-RNN please vist the project website http://crfasrnn.torr.vision. Contact: <crfasrnn@gmail.com>

@@ -1,27 +1,33 @@
-clear all;
-close all;
-%This is a software bundle "CRF-RNN", which is published in a ICCV paper titled "Conditional Random Fields as Recurrent Neural Networks". This is implemented as part of the Caffe library, written in C++/C. The current version is maintained by:
+% This package contains code for the "CRF-RNN" semantic image segmentation method, published in the 
+% ICCV 2015 paper Conditional Random Fields as Recurrent Neural Networks. Our software is built on 
+% top of the Caffe deep learning library.
+% 
+% Contact:
+% Shuai Zheng (szheng@robots.ox.ac.uk), Sadeep Jayasumana (sadeep@robots.ox.ac.uk), Bernardino Romera-Paredes (bernard@robots.ox.ac.uk)
 %
-%Shuai Zheng : szheng@robots.ox.ac.uk Sadeep Jayasumana : sadeep@robots.ox.ac.uk Bernardino Romera Paredes :
+% Supervisor: 
+% Philip Torr (philip.torr@eng.ox.ac.uk)
 %
-%Supervisor: Philip Torr : philip.torr@eng.ox.ac.uk
+% For more information about CRF-RNN please vist the project website http://crfasrnn.torr.vision.
 %
-%For more information about CRF-RNN please vist the project website http://crfasrnn.torr.vision.
-%
-caffe_path = '../caffe-crfrnn/';
 
-model_def_file = 'TVG_CRFRNN_COCO_VOC.prototxt';
+caffe_path = '../caffe/';
+
+model_def_file = 'TVG_CRFRNN_new_deploy.prototxt';
 model_file = 'TVG_CRFRNN_COCO_VOC.caffemodel';
 
-use_gpu = 1;
+if exist(model_file, 'file') ~= 2
+    error('You need a network model file. Please download our default model by running ./download_trained_model.sh');
+end
 
-addpath(fullfile(caffe_path, 'matlab/caffe'));
+use_gpu = 1; % Set this to 0 if you don't have a GPU.
+gpu_id = 0;% which gpu device id you are using?
 
-caffe('reset');
-caffe('set_device', 0);% change here if you have a powerful GPU in different device, nvidia-smi will help you check the device information.
+addpath(fullfile(caffe_path, 'matlab'));
 
-tvg_matcaffe_init(use_gpu, model_def_file, model_file);
-[~, map] = imread('2007_000033.png']);
+caffe.reset_all();
+
+net = tvg_matcaffe_init(use_gpu, gpu_id, model_def_file, model_file);
 
 im = imread('input.jpg');
 
@@ -38,7 +44,7 @@ end
 prepared_im = tvg_prepare_image_fixed(im);
 
 inputData = {prepared_im};
-scores = caffe('forward', inputData);    
+scores = net.forward(inputData);    
 
 Q = scores{1};        
         
@@ -46,5 +52,5 @@ Q = scores{1};
 pred = pred';
 pred = pred(1:h, 1:w);
 
-imwrite(pred, map, ['output.png'], 'png');    
-
+load map.mat
+imwrite(pred, map, 'output.png', 'png');    
